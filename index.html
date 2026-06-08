@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arabic ↔ Turkish Translator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0f1a;
+    font-family: 'Segoe UI', sans-serif;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { text-align: center; color: #2dd4bf; margin-bottom: 20px; }
+  
+  .status {
+    background: #0f172a;
+    padding: 15px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 20px;
+    border-left: 4px solid #2dd4bf;
+  }
+  .mic-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #475569;
+    margin-right: 8px;
+  }
+  .mic-dot.active { background: #10b981; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 700px) { .panels { grid-template-columns: 1fr; } }
+  
+  .panel {
+    background: #11161c;
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid rgba(45,212,191,0.2);
+  }
+  .panel-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 15px; }
+  .panel-title.ar { color: #2dd4bf; }
+  .panel-title.tr { color: #c084fc; }
+  
+  .box {
+    background: #030712;
+    border-radius: 12px;
+    padding: 15px;
+    margin: 12px 0;
+  }
+  .label { font-size: 11px; color: #6c86a3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .text { color: #e2e8f0; font-size: 1rem; line-height: 1.4; min-height: 60px; word-break: break-word; }
+  
+  .buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 25px;
+  }
+  button {
+    padding: 12px 28px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    border-radius: 40px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  #startBtn { background: #0f3b3a; color: #2dd4bf; border: 1px solid #2dd4bf; }
+  #stopBtn { background: #2c1a1e; color: #f87171; display: none; }
+  #clearBtn { background: #1e293b; color: #facc15; }
+  
+  footer { text-align: center; margin-top: 30px; color: #4a5a66; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎙️ العربية ↔ Türkçe | Real-time Voice</h1>
+
+  <div class="status">
+    <span id="micDot" class="mic-dot"></span>
+    <span id="statusMsg">⚡ Click START - Microphone ready in desktop app!</span>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-title ar">🇸🇦 Arabic → Turkish</div>
+      <div class="box">
+        <div class="label">🎙️ YOU SAID (ARABIC)</div>
+        <div class="text" id="arSpoken">—</div>
+      </div>
+      <div class="box">
+        <div class="label">🔊 TURKISH TRANSLATION</div>
+        <div class="text" id="arTrans">—</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title tr">🇹🇷 Turkish → Arabic</div>
+      <div class="box">
+        <div class="label">🎙️ YOU SAID (TURKISH)</div>
+        <div class="text" id="trSpoken">—</div>
+      </div>
+      <div class="box">
+        <div class="label">🔊 ARABIC TRANSLATION</div>
+        <div class="text" id="trTrans">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button id="startBtn">🎤 START</button>
+    <button id="stopBtn">⏹️ STOP</button>
+    <button id="clearBtn">🗑️ CLEAR</button>
+  </div>
+  <footer>Desktop App - Microphone works automatically!</footer>
+</div>
+
+<script>
+let isRunning = false;
+let arRecog = null;
+let trRecog = null;
+let arText = "";
+let trText = "";
+let arTimer = null;
+let trTimer = null;
+
+const arSpoken = document.getElementById('arSpoken');
+const trSpoken = document.getElementById('trSpoken');
+const arTrans = document.getElementById('arTrans');
+const trTrans = document.getElementById('trTrans');
+const statusMsg = document.getElementById('statusMsg');
+const micDot = document.getElementById('micDot');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const clearBtn = document.getElementById('clearBtn');
+
+async function translate(text, from, to) {
+  if (!text.trim()) return "";
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    let result = data?.responseData?.translatedText || text;
+    result = result.replace(/\[UNK\]/g, '');
+    return result;
+  } catch(e) { return text; }
+}
+
+function speak(text, lang) {
+  if (!text || !window.speechSynthesis) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = lang === 'ar' ? 'ar-EG' : 'tr-TR';
+    utter.rate = 0.85;
+    window.speechSynthesis.speak(utter);
+  } catch(e) {}
+}
+
+function triggerArTrans(text) {
+  if (arTimer) clearTimeout(arTimer);
+  arTimer = setTimeout(async () => {
+    if (text.trim()) {
+      const res = await translate(text, 'ar', 'tr');
+      arTrans.innerHTML = res;
+      speak(res, 'tr');
+    }
+  }, 100);
+}
+
+function triggerTrTrans(text) {
+  if (trTimer) clearTimeout(trTimer);
+  trTimer = setTimeout(async () => {
+    if (text.trim()) {
+      const res = await translate(text, 'tr', 'ar');
+      trTrans.innerHTML = res;
+      speak(res, 'ar');
+    }
+  }, 100);
+}
+
+function createArabic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = false;
+  rec.lang = 'ar-EG';
+  rec.onresult = (e) => {
+    if (!isRunning) return;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        let txt = e.results[i][0].transcript.trim();
+        if (txt) {
+          arText = arText + " " + txt;
+          arSpoken.innerHTML = arText.trim() || "—";
+          triggerArTrans(txt);
+        }
+      }
+    }
+  };
+  rec.onend = () => {
+    if (isRunning) {
+      setTimeout(() => { if (isRunning && arRecog) try { arRecog.start(); } catch(e) {} }, 300);
+    }
+  };
+  return rec;
+}
+
+function createTurkish() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = false;
+  rec.lang = 'tr-TR';
+  rec.onresult = (e) => {
+    if (!isRunning) return;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        let txt = e.results[i][0].transcript.trim();
+        if (txt) {
+          trText = trText + " " + txt;
+          trSpoken.innerHTML = trText.trim() || "—";
+          triggerTrTrans(txt);
+        }
+      }
+    }
+  };
+  rec.onend = () => {
+    if (isRunning) {
+      setTimeout(() => { if (isRunning && trRecog) try { trRecog.start(); } catch(e) {} }, 300);
+    }
+  };
+  return rec;
+}
+
+async function startApp() {
+  if (isRunning) return;
+  
+  if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+    statusMsg.innerHTML = '❌ Speech recognition not supported.';
+    return;
+  }
+  
+  if (!arRecog) arRecog = createArabic();
+  if (!trRecog) trRecog = createTurkish();
+  
+  if (!arRecog || !trRecog) {
+    statusMsg.innerHTML = '❌ Could not create speech recognizers';
+    return;
+  }
+  
+  arText = "";
+  trText = "";
+  arSpoken.innerHTML = "—";
+  trSpoken.innerHTML = "—";
+  arTrans.innerHTML = "—";
+  trTrans.innerHTML = "—";
+  
+  isRunning = true;
+  micDot.classList.add('active');
+  
+  try { arRecog.start(); } catch(e) {}
+  setTimeout(() => { try { trRecog.start(); } catch(e) {} }, 200);
+  
+  startBtn.disabled = true;
+  stopBtn.style.display = 'inline-flex';
+  statusMsg.innerHTML = '🎙️ LISTENING: Speak Arabic or Turkish';
+}
+
+function stopAll() {
+  isRunning = false;
+  micDot.classList.remove('active');
+  if (arRecog) try { arRecog.stop(); } catch(e) {}
+  if (trRecog) try { trRecog.stop(); } catch(e) {}
+  if (arTimer) clearTimeout(arTimer);
+  if (trTimer) clearTimeout(trTimer);
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  startBtn.disabled = false;
+  stopBtn.style.display = 'none';
+  statusMsg.innerHTML = '⏹️ Stopped. Click START to resume.';
+}
+
+function clearAll() {
+  arText = "";
+  trText = "";
+  arSpoken.innerHTML = "—";
+  trSpoken.innerHTML = "—";
+  arTrans.innerHTML = "—";
+  trTrans.innerHTML = "—";
+  statusMsg.innerHTML = '🗑️ Cleared';
+}
+
+startBtn.onclick = startApp;
+stopBtn.onclick = stopAll;
+clearBtn.onclick = clearAll;
+
+// For NW.js/Electron - request microphone permission automatically
+if (typeof require !== 'undefined') {
+  try {
+    const { systemPreferences } = require('electron');
+    if (systemPreferences && systemPreferences.askForMediaAccess) {
+      systemPreferences.askForMediaAccess('microphone');
+    }
+  } catch(e) {}
+}
+</script>
+</body>
+</html>
