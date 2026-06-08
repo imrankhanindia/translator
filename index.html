@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>Arabic ↔ Turkish Translator - Working Version</title>
+<title>Arabic ↔ Turkish Translator - No Repeating</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -32,6 +32,7 @@
     margin-right: 8px;
   }
   .mic-dot.active { background: #10b981; animation: pulse 1s infinite; }
+  .mic-dot.speaking { background: #facc15; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   
   .mode-selector {
@@ -122,7 +123,7 @@
 
   <div class="status">
     <span id="micDot" class="mic-dot"></span>
-    <span id="statusMsg">⚡ Click START and speak</span>
+    <span id="statusMsg">⚡ Click START - Each phrase translates ONCE</span>
   </div>
 
   <div class="panels">
@@ -156,33 +157,44 @@
     <button id="clearBtn">🗑️ CLEAR</button>
   </div>
   <footer>
-    💡 Speak a phrase → It translates once → Stops<br>
-    Use headphones to prevent echo/repeating
+    💡 Speak a phrase → Translates ONCE → Stops completely until you speak again<br>
+    <strong>NO REPEATING</strong> - Each phrase translates only one time
   </footer>
 </div>
 
 <script>
-// ========== SIMPLE WORKING VERSION ==========
-// No complex muting - just simple translation
+// ========== COMPLETE FIX FOR REPEATING PHRASES ==========
+// Solution: Track each phrase with multiple layers of protection
 
 let isRunning = false;
 let currentMode = "both";
 let arRecog = null;
 let trRecog = null;
 
-// Store text
+// Store text history
 let arHistory = "";
 let trHistory = "";
 
-// Prevent rapid repeats (time-based)
-let lastArPhrase = "";
-let lastTrPhrase = "";
-let lastArTime = 0;
-let lastTrTime = 0;
+// CRITICAL: Track last processed phrase with timestamp and fingerprint
+let lastProcessedArabic = {
+  text: "",
+  timestamp: 0,
+  fingerprint: ""
+};
+
+let lastProcessedTurkish = {
+  text: "",
+  timestamp: 0,
+  fingerprint: ""
+};
+
+// Track if we're currently processing (to prevent parallel translations)
+let isProcessingArabic = false;
+let isProcessingTurkish = false;
 
 // Timers
-let arTimer = null;
-let trTimer = null;
+let arProcessTimer = null;
+let trProcessTimer = null;
 
 // DOM elements
 const arSpoken = document.getElementById('arSpoken');
@@ -196,7 +208,12 @@ const stopBtn = document.getElementById('stopBtn');
 const clearBtn = document.getElementById('clearBtn');
 const modeBtns = document.querySelectorAll('.mode-btn');
 
-// Translation function
+// Create a fingerprint for text to detect exact duplicates
+function getFingerprint(text) {
+  return text.toLowerCase().trim().replace(/[^\u0621-\u064A\u0660-\u0669a-z\s]/g, '');
+}
+
+// Translation API
 async function translate(text, from, to) {
   if (!text || text.trim().length < 2) return "";
   try {
@@ -212,83 +229,174 @@ async function translate(text, from, to) {
   }
 }
 
-// Speak function (with simple cooldown to prevent loops)
+// Speak function
+let isSpeaking = false;
 function speak(text, lang) {
   if (!text || text.trim().length < 2) return;
+  if (isSpeaking) {
+    window.speechSynthesis.cancel();
+    setTimeout(() => speak(text, lang), 100);
+    return;
+  }
+  
   try {
+    isSpeaking = true;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang === 'ar' ? 'ar-EG' : 'tr-TR';
     utterance.rate = 0.85;
+    
+    utterance.onend = () => {
+      setTimeout(() => { isSpeaking = false; }, 200);
+    };
+    
+    utterance.onerror = () => {
+      isSpeaking = false;
+    };
+    
     window.speechSynthesis.speak(utterance);
   } catch(e) {
     console.log("Speech error:", e);
+    isSpeaking = false;
   }
 }
 
-// Translate Arabic to Turkish
-async function doArabicTranslate(arabicText) {
+// Translate Arabic to Turkish - WITH REPEAT PROTECTION
+async function translateArabic(arabicText) {
   if (!arabicText || arabicText.trim().length < 2) return;
-  
-  // Prevent same phrase within 3 seconds
-  const now = Date.now();
-  if (arabicText === lastArPhrase && (now - lastArTime) < 3000) {
-    console.log("Skipping repeat Arabic:", arabicText);
+  if (isProcessingArabic) {
+    console.log("Already processing Arabic, skipping");
     return;
   }
   
-  lastArPhrase = arabicText;
-  lastArTime = now;
+  const cleanText = arabicText.trim();
+  const fingerprint = getFingerprint(cleanText);
+  const now = Date.now();
+  
+  // STRONG REPEAT PROTECTION:
+  // 1. Exact same text within 5 seconds
+  if (cleanText === lastProcessedArabic.text && (now - lastProcessedArabic.timestamp) < 5000) {
+    console.log("REPEAT BLOCKED (same text):", cleanText);
+    return;
+  }
+  
+  // 2. Same fingerprint within 4 seconds (catches small variations)
+  if (fingerprint === lastProcessedArabic.fingerprint && (now - lastProcessedArabic.timestamp) < 4000) {
+    console.log("REPEAT BLOCKED (similar text):", cleanText);
+    return;
+  }
+  
+  // 3. Too short or common religious phrases have extra cooldown
+  const isShortPhrase = cleanText.split(' ').length <= 2;
+  const cooldownTime = isShortPhrase ? 6000 : 4000;
+  if (fingerprint === lastProcessedArabic.fingerprint && (now - lastProcessedArabic.timestamp) < cooldownTime) {
+    console.log("REPEAT BLOCKED (short phrase cooldown):", cleanText);
+    return;
+  }
+  
+  // Update tracking
+  lastProcessedArabic = {
+    text: cleanText,
+    timestamp: now,
+    fingerprint: fingerprint
+  };
+  
+  isProcessingArabic = true;
   
   // Show translating
   arTrans.innerHTML = "⏳ Translating...";
   
-  const translated = await translate(arabicText, 'ar', 'tr');
-  arTrans.innerHTML = translated;
-  
-  // Speak the translation
-  speak(translated, 'tr');
+  try {
+    const translated = await translate(cleanText, 'ar', 'tr');
+    arTrans.innerHTML = translated;
+    
+    // Small delay before speaking to allow UI to update
+    setTimeout(() => {
+      speak(translated, 'tr');
+    }, 100);
+  } catch(e) {
+    console.log("Translation failed:", e);
+    arTrans.innerHTML = cleanText;
+  } finally {
+    setTimeout(() => {
+      isProcessingArabic = false;
+    }, 1000);
+  }
 }
 
-// Translate Turkish to Arabic
-async function doTurkishTranslate(turkishText) {
+// Translate Turkish to Arabic - WITH REPEAT PROTECTION
+async function translateTurkish(turkishText) {
   if (!turkishText || turkishText.trim().length < 2) return;
-  
-  // Prevent same phrase within 3 seconds
-  const now = Date.now();
-  if (turkishText === lastTrPhrase && (now - lastTrTime) < 3000) {
-    console.log("Skipping repeat Turkish:", turkishText);
+  if (isProcessingTurkish) {
+    console.log("Already processing Turkish, skipping");
     return;
   }
   
-  lastTrPhrase = turkishText;
-  lastTrTime = now;
+  const cleanText = turkishText.trim();
+  const fingerprint = getFingerprint(cleanText);
+  const now = Date.now();
   
-  // Show translating
+  // STRONG REPEAT PROTECTION
+  if (cleanText === lastProcessedTurkish.text && (now - lastProcessedTurkish.timestamp) < 5000) {
+    console.log("REPEAT BLOCKED (same text):", cleanText);
+    return;
+  }
+  
+  if (fingerprint === lastProcessedTurkish.fingerprint && (now - lastProcessedTurkish.timestamp) < 4000) {
+    console.log("REPEAT BLOCKED (similar text):", cleanText);
+    return;
+  }
+  
+  const isShortPhrase = cleanText.split(' ').length <= 2;
+  const cooldownTime = isShortPhrase ? 6000 : 4000;
+  if (fingerprint === lastProcessedTurkish.fingerprint && (now - lastProcessedTurkish.timestamp) < cooldownTime) {
+    console.log("REPEAT BLOCKED (short phrase cooldown):", cleanText);
+    return;
+  }
+  
+  lastProcessedTurkish = {
+    text: cleanText,
+    timestamp: now,
+    fingerprint: fingerprint
+  };
+  
+  isProcessingTurkish = true;
+  
   trTrans.innerHTML = "⏳ جاري الترجمة...";
   
-  const translated = await translate(turkishText, 'tr', 'ar');
-  trTrans.innerHTML = translated;
-  
-  // Speak the translation
-  speak(translated, 'ar');
+  try {
+    const translated = await translate(cleanText, 'tr', 'ar');
+    trTrans.innerHTML = translated;
+    setTimeout(() => {
+      speak(translated, 'ar');
+    }, 100);
+  } catch(e) {
+    console.log("Translation failed:", e);
+    trTrans.innerHTML = cleanText;
+  } finally {
+    setTimeout(() => {
+      isProcessingTurkish = false;
+    }, 1000);
+  }
 }
 
-// Create Arabic recognizer - SIMPLE VERSION
+// Create Arabic recognizer with proper silence detection
 function createArabicRecognizer() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    statusMsg.innerHTML = '❌ Browser not supported';
-    return null;
-  }
+  if (!SpeechRecognition) return null;
   
   const recognition = new SpeechRecognition();
   recognition.continuous = true;
-  recognition.interimResults = false;
+  recognition.interimResults = true; // Use interim to detect when user stops
   recognition.lang = 'ar-EG';
+  recognition.maxAlternatives = 1;
+  
+  let lastFinalText = "";
+  let speakingTimer = null;
+  let isUserSpeaking = false;
   
   recognition.onstart = () => {
-    console.log("Arabic recognition started");
+    console.log("Arabic started");
     micDot.classList.add('active');
     if (currentMode === "both" || currentMode === "ar") {
       statusMsg.innerHTML = '🎙️ Listening for ARABIC...';
@@ -298,76 +406,109 @@ function createArabicRecognizer() {
   recognition.onresult = (event) => {
     if (!isRunning) return;
     
+    let finalText = "";
+    let interimText = "";
+    
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
-        const text = event.results[i][0].transcript.trim();
-        console.log("Arabic detected:", text);
-        
-        if (text && text.length > 1) {
-          // Add to history
-          arHistory = arHistory + " " + text;
+        finalText += event.results[i][0].transcript;
+      } else {
+        interimText += event.results[i][0].transcript;
+      }
+    }
+    
+    // User is speaking
+    if (interimText || finalText) {
+      if (!isUserSpeaking) {
+        isUserSpeaking = true;
+        micDot.classList.add('speaking');
+      }
+      
+      // Clear any pending timer (user is still speaking)
+      if (speakingTimer) clearTimeout(speakingTimer);
+    }
+    
+    // If we have a final result
+    if (finalText && finalText.trim() !== lastFinalText) {
+      lastFinalText = finalText.trim();
+      
+      // Set timer to process AFTER user stops speaking
+      speakingTimer = setTimeout(() => {
+        if (isRunning && finalText.trim() && finalText.trim().length > 1) {
+          console.log("Arabic phrase complete:", finalText);
+          
+          // Add to history display
+          arHistory = arHistory + " " + finalText;
           arSpoken.innerHTML = arHistory.trim() || "—";
           
-          // Clear previous timer
-          if (arTimer) clearTimeout(arTimer);
+          // Translate the phrase
+          translateArabic(finalText.trim());
           
-          // Wait a moment to see if user continues speaking
-          arTimer = setTimeout(() => {
-            if (isRunning) {
-              doArabicTranslate(text);
-            }
-          }, 500);
+          // Reset speaking state
+          isUserSpeaking = false;
+          micDot.classList.remove('speaking');
+          micDot.classList.add('active');
         }
-      }
+        speakingTimer = null;
+      }, 800); // Wait 800ms silence before processing
     }
   };
   
   recognition.onerror = (event) => {
     console.log("Arabic error:", event.error);
     if (event.error === 'not-allowed') {
-      statusMsg.innerHTML = '❌ Microphone access denied. Please allow microphone.';
+      statusMsg.innerHTML = '❌ Microphone access denied';
       stopAll();
     } else if (event.error === 'no-speech') {
       // Normal - no speech detected
-      console.log("No speech detected");
+      if (speakingTimer) clearTimeout(speakingTimer);
+      isUserSpeaking = false;
+      micDot.classList.remove('speaking');
     }
   };
   
   recognition.onend = () => {
-    console.log("Arabic recognition ended");
-    // Auto-restart if still running
+    console.log("Arabic ended");
+    micDot.classList.remove('speaking');
+    
+    // Clear any pending timer
+    if (speakingTimer) clearTimeout(speakingTimer);
+    isUserSpeaking = false;
+    
+    // Auto-restart
     if (isRunning && (currentMode === "both" || currentMode === "ar")) {
       setTimeout(() => {
         if (isRunning && arRecog) {
           try {
             arRecog.start();
-            console.log("Arabic restarted");
           } catch(e) {
             console.log("Failed to restart Arabic:", e);
           }
         }
-      }, 300);
+      }, 500);
     }
   };
   
   return recognition;
 }
 
-// Create Turkish recognizer - SIMPLE VERSION
+// Create Turkish recognizer
 function createTurkishRecognizer() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    statusMsg.innerHTML = '❌ Browser not supported';
-    return null;
-  }
+  if (!SpeechRecognition) return null;
   
   const recognition = new SpeechRecognition();
   recognition.continuous = true;
-  recognition.interimResults = false;
+  recognition.interimResults = true;
   recognition.lang = 'tr-TR';
+  recognition.maxAlternatives = 1;
+  
+  let lastFinalText = "";
+  let speakingTimer = null;
+  let isUserSpeaking = false;
   
   recognition.onstart = () => {
-    console.log("Turkish recognition started");
+    console.log("Turkish started");
     if (currentMode === "both" || currentMode === "tr") {
       statusMsg.innerHTML = '🎙️ Listening for TURKISH...';
     }
@@ -376,52 +517,73 @@ function createTurkishRecognizer() {
   recognition.onresult = (event) => {
     if (!isRunning) return;
     
+    let finalText = "";
+    let interimText = "";
+    
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
-        const text = event.results[i][0].transcript.trim();
-        console.log("Turkish detected:", text);
-        
-        if (text && text.length > 1) {
-          // Add to history
-          trHistory = trHistory + " " + text;
+        finalText += event.results[i][0].transcript;
+      } else {
+        interimText += event.results[i][0].transcript;
+      }
+    }
+    
+    if (interimText || finalText) {
+      if (!isUserSpeaking) {
+        isUserSpeaking = true;
+        micDot.classList.add('speaking');
+      }
+      if (speakingTimer) clearTimeout(speakingTimer);
+    }
+    
+    if (finalText && finalText.trim() !== lastFinalText) {
+      lastFinalText = finalText.trim();
+      
+      speakingTimer = setTimeout(() => {
+        if (isRunning && finalText.trim() && finalText.trim().length > 1) {
+          console.log("Turkish phrase complete:", finalText);
+          
+          trHistory = trHistory + " " + finalText;
           trSpoken.innerHTML = trHistory.trim() || "—";
           
-          // Clear previous timer
-          if (trTimer) clearTimeout(trTimer);
+          translateTurkish(finalText.trim());
           
-          // Wait a moment to see if user continues speaking
-          trTimer = setTimeout(() => {
-            if (isRunning) {
-              doTurkishTranslate(text);
-            }
-          }, 500);
+          isUserSpeaking = false;
+          micDot.classList.remove('speaking');
+          micDot.classList.add('active');
         }
-      }
+        speakingTimer = null;
+      }, 800);
     }
   };
   
   recognition.onerror = (event) => {
     console.log("Turkish error:", event.error);
     if (event.error === 'not-allowed') {
-      statusMsg.innerHTML = '❌ Microphone access denied. Please allow microphone.';
+      statusMsg.innerHTML = '❌ Microphone access denied';
       stopAll();
     }
+    if (speakingTimer) clearTimeout(speakingTimer);
+    isUserSpeaking = false;
+    micDot.classList.remove('speaking');
   };
   
   recognition.onend = () => {
-    console.log("Turkish recognition ended");
-    // Auto-restart if still running
+    console.log("Turkish ended");
+    micDot.classList.remove('speaking');
+    if (speakingTimer) clearTimeout(speakingTimer);
+    isUserSpeaking = false;
+    
     if (isRunning && (currentMode === "both" || currentMode === "tr")) {
       setTimeout(() => {
         if (isRunning && trRecog) {
           try {
             trRecog.start();
-            console.log("Turkish restarted");
           } catch(e) {
             console.log("Failed to restart Turkish:", e);
           }
         }
-      }, 300);
+      }, 500);
     }
   };
   
@@ -437,8 +599,7 @@ async function requestMicrophone() {
     statusMsg.innerHTML = '✅ Microphone ready! Click START';
     return true;
   } catch(err) {
-    console.log("Mic error:", err);
-    statusMsg.innerHTML = '❌ Microphone access denied. Please check permissions.';
+    statusMsg.innerHTML = '❌ Microphone access denied';
     return false;
   }
 }
@@ -447,104 +608,69 @@ async function requestMicrophone() {
 async function startTranslator() {
   if (isRunning) return;
   
-  // Check support
   if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
-    statusMsg.innerHTML = '❌ Speech recognition not supported in this browser. Use Chrome or Edge.';
+    statusMsg.innerHTML = '❌ Browser not supported';
     return;
   }
   
-  // Request permission
   const hasPermission = await requestMicrophone();
   if (!hasPermission) return;
   
-  // Create recognizers if needed
-  if (!arRecog) {
-    arRecog = createArabicRecognizer();
-  }
-  if (!trRecog) {
-    trRecog = createTurkishRecognizer();
-  }
+  if (!arRecog) arRecog = createArabicRecognizer();
+  if (!trRecog) trRecog = createTurkishRecognizer();
   
-  if (!arRecog || !trRecog) {
-    statusMsg.innerHTML = '❌ Failed to create speech recognizers';
-    return;
-  }
-  
-  // Reset
+  // Reset all tracking
   arHistory = "";
   trHistory = "";
-  lastArPhrase = "";
-  lastTrPhrase = "";
+  lastProcessedArabic = { text: "", timestamp: 0, fingerprint: "" };
+  lastProcessedTurkish = { text: "", timestamp: 0, fingerprint: "" };
+  isProcessingArabic = false;
+  isProcessingTurkish = false;
+  
   arSpoken.innerHTML = "—";
   trSpoken.innerHTML = "—";
   arTrans.innerHTML = "—";
   trTrans.innerHTML = "—";
   
   isRunning = true;
-  micDot.classList.add('active');
   
-  // Start recognizers based on mode
   if (currentMode === "both" || currentMode === "ar") {
-    try {
-      arRecog.start();
-      console.log("Arabic started");
-    } catch(e) {
-      console.log("Error starting Arabic:", e);
-    }
+    try { arRecog.start(); } catch(e) {}
   }
-  
   if (currentMode === "both" || currentMode === "tr") {
-    setTimeout(() => {
-      try {
-        if (trRecog) trRecog.start();
-        console.log("Turkish started");
-      } catch(e) {
-        console.log("Error starting Turkish:", e);
-      }
-    }, 200);
+    setTimeout(() => { try { if (trRecog) trRecog.start(); } catch(e) {} }, 200);
   }
   
   startBtn.disabled = true;
   stopBtn.style.display = 'inline-flex';
-  statusMsg.innerHTML = '🎙️ Listening! Speak ' + 
+  statusMsg.innerHTML = '🎙️ Speak ' + 
     (currentMode === "both" ? "Arabic or Turkish" : (currentMode === "ar" ? "Arabic" : "Turkish"));
 }
 
-// Stop translator
-function stopTranslator() {
+function stopAll() {
   isRunning = false;
-  micDot.classList.remove('active');
-  
-  if (arRecog) {
-    try { arRecog.stop(); } catch(e) {}
-  }
-  if (trRecog) {
-    try { trRecog.stop(); } catch(e) {}
-  }
-  
-  if (arTimer) clearTimeout(arTimer);
-  if (trTimer) clearTimeout(trTimer);
+  if (arRecog) try { arRecog.stop(); } catch(e) {}
+  if (trRecog) try { trRecog.stop(); } catch(e) {}
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   
   startBtn.disabled = false;
   stopBtn.style.display = 'none';
-  statusMsg.innerHTML = '⏹️ Stopped. Click START to resume.';
+  statusMsg.innerHTML = '⏹️ Stopped';
+  micDot.classList.remove('active', 'speaking');
 }
 
-// Clear text
-function clearText() {
+function clearAll() {
   arHistory = "";
   trHistory = "";
-  lastArPhrase = "";
-  lastTrPhrase = "";
+  lastProcessedArabic = { text: "", timestamp: 0, fingerprint: "" };
+  lastProcessedTurkish = { text: "", timestamp: 0, fingerprint: "" };
   arSpoken.innerHTML = "—";
   trSpoken.innerHTML = "—";
   arTrans.innerHTML = "—";
   trTrans.innerHTML = "—";
-  statusMsg.innerHTML = '🗑️ Cleared. ' + (isRunning ? 'Continue speaking!' : 'Click START.');
+  statusMsg.innerHTML = '🗑️ Cleared';
 }
 
-// Change mode
 function changeMode(mode) {
   currentMode = mode;
   modeBtns.forEach(btn => {
@@ -554,24 +680,16 @@ function changeMode(mode) {
       btn.classList.remove('active');
     }
   });
-  
-  // Restart if running
   if (isRunning) {
-    stopTranslator();
+    stopAll();
     setTimeout(() => startTranslator(), 500);
   }
 }
 
-// Event listeners
 startBtn.onclick = startTranslator;
-stopBtn.onclick = stopTranslator;
-clearBtn.onclick = clearText;
-
-modeBtns.forEach(btn => {
-  btn.onclick = () => changeMode(btn.dataset.mode);
-});
-
-console.log("App loaded. Ready to start!");
+stopBtn.onclick = stopAll;
+clearBtn.onclick = clearAll;
+modeBtns.forEach(btn => btn.onclick = () => changeMode(btn.dataset.mode));
 </script>
 </body>
 </html>
