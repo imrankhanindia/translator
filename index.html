@@ -2,25 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Arabic ↔ Turkish Translator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+<title>Arabic ↔ Turkish Translator - Mobile Optimized</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #0a0f1a;
-    font-family: 'Segoe UI', sans-serif;
-    padding: 24px;
+    font-family: system-ui, 'Segoe UI', sans-serif;
+    padding: 16px;
     min-height: 100vh;
   }
-  .container { max-width: 1200px; margin: 0 auto; }
-  h1 { text-align: center; color: #2dd4bf; margin-bottom: 20px; }
+  .container { max-width: 800px; margin: 0 auto; }
+  h1 { text-align: center; color: #2dd4bf; font-size: 1.5rem; margin-bottom: 16px; }
   
   .status {
     background: #0f172a;
-    padding: 15px;
+    padding: 12px;
     border-radius: 12px;
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     border-left: 4px solid #2dd4bf;
   }
   .mic-dot {
@@ -34,40 +34,61 @@
   .mic-dot.active { background: #10b981; animation: pulse 1s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   
+  .mode-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    justify-content: center;
+  }
+  .mode-btn {
+    padding: 10px 20px;
+    border-radius: 40px;
+    background: #1e293b;
+    color: #94a3b8;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .mode-btn.active {
+    background: #2dd4bf20;
+    color: #2dd4bf;
+    border: 1px solid #2dd4bf;
+  }
+  
   .panels {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
-  @media (max-width: 700px) { .panels { grid-template-columns: 1fr; } }
   
   .panel {
     background: #11161c;
-    border-radius: 16px;
-    padding: 20px;
+    border-radius: 20px;
+    padding: 16px;
     border: 1px solid rgba(45,212,191,0.2);
   }
-  .panel-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 15px; }
+  .panel-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 12px; text-align: center; }
   .panel-title.ar { color: #2dd4bf; }
   .panel-title.tr { color: #c084fc; }
   
   .box {
     background: #030712;
-    border-radius: 12px;
-    padding: 15px;
-    margin: 12px 0;
+    border-radius: 16px;
+    padding: 14px;
+    margin: 10px 0;
   }
-  .label { font-size: 11px; color: #6c86a3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-  .text { color: #e2e8f0; font-size: 1rem; line-height: 1.4; min-height: 60px; word-break: break-word; }
+  .label { font-size: 10px; color: #6c86a3; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+  .text { color: #e2e8f0; font-size: 1rem; line-height: 1.4; min-height: 50px; word-break: break-word; }
   
   .buttons {
     display: flex;
-    gap: 15px;
+    gap: 12px;
     justify-content: center;
-    margin-top: 25px;
+    margin-top: 20px;
+    flex-wrap: wrap;
   }
   button {
-    padding: 12px 28px;
+    padding: 12px 24px;
     font-size: 14px;
     font-weight: bold;
     border: none;
@@ -78,17 +99,30 @@
   #startBtn { background: #0f3b3a; color: #2dd4bf; border: 1px solid #2dd4bf; }
   #stopBtn { background: #2c1a1e; color: #f87171; display: none; }
   #clearBtn { background: #1e293b; color: #facc15; }
+  #reloadBtn { background: #1e293b; color: #60a5fa; border: 1px solid #60a5fa50; }
   
-  footer { text-align: center; margin-top: 30px; color: #4a5a66; font-size: 12px; }
+  footer { text-align: center; margin-top: 20px; color: #4a5a66; font-size: 11px; }
+  
+  @media (min-width: 700px) {
+    .panels { grid-template-columns: 1fr 1fr; }
+    body { padding: 24px; }
+    h1 { font-size: 2rem; }
+  }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>🎙️ العربية ↔ Türkçe | Real-time Voice</h1>
+  <h1>🎙️ العربية ↔ Türkçe</h1>
+
+  <div class="mode-selector">
+    <button class="mode-btn active" data-mode="both">🌍 Both Languages</button>
+    <button class="mode-btn" data-mode="ar">🇸🇦 Arabic Only</button>
+    <button class="mode-btn" data-mode="tr">🇹🇷 Turkish Only</button>
+  </div>
 
   <div class="status">
     <span id="micDot" class="mic-dot"></span>
-    <span id="statusMsg">⚡ Click START - Microphone ready in desktop app!</span>
+    <span id="statusMsg">⚡ Click START - Works continuously on mobile!</span>
   </div>
 
   <div class="panels">
@@ -120,19 +154,32 @@
     <button id="startBtn">🎤 START</button>
     <button id="stopBtn">⏹️ STOP</button>
     <button id="clearBtn">🗑️ CLEAR</button>
+    <button id="reloadBtn">🔄 RESET MIC</button>
   </div>
-  <footer>Desktop App - Microphone works automatically!</footer>
+  <footer>
+    💡 On mobile: Keep screen ON. Tap "RESET MIC" if listening stops.<br>
+    Speak clearly. Auto-translates and speaks back.
+  </footer>
 </div>
 
 <script>
+// ========== MOBILE-OPTIMIZED VERSION ==========
+// Fixes: Continuous listening, auto-restart on mobile, reset button
+
 let isRunning = false;
+let currentMode = "both"; // both, ar, tr
 let arRecog = null;
 let trRecog = null;
 let arText = "";
 let trText = "";
 let arTimer = null;
 let trTimer = null;
+let restartTimeout = null;
 
+// For mobile - prevent screen sleep
+let wakeLock = null;
+
+// DOM elements
 const arSpoken = document.getElementById('arSpoken');
 const trSpoken = document.getElementById('trSpoken');
 const arTrans = document.getElementById('arTrans');
@@ -142,7 +189,10 @@ const micDot = document.getElementById('micDot');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const clearBtn = document.getElementById('clearBtn');
+const reloadBtn = document.getElementById('reloadBtn');
+const modeBtns = document.querySelectorAll('.mode-btn');
 
+// Translation API
 async function translate(text, from, to) {
   if (!text.trim()) return "";
   try {
@@ -155,6 +205,7 @@ async function translate(text, from, to) {
   } catch(e) { return text; }
 }
 
+// Text to Speech
 function speak(text, lang) {
   if (!text || !window.speechSynthesis) return;
   try {
@@ -166,6 +217,7 @@ function speak(text, lang) {
   } catch(e) {}
 }
 
+// Translation triggers
 function triggerArTrans(text) {
   if (arTimer) clearTimeout(arTimer);
   arTimer = setTimeout(async () => {
@@ -188,6 +240,42 @@ function triggerTrTrans(text) {
   }, 100);
 }
 
+// Force restart recognition (fix for mobile)
+function forceRestart() {
+  if (!isRunning) return;
+  
+  if (restartTimeout) clearTimeout(restartTimeout);
+  restartTimeout = setTimeout(() => {
+    if (isRunning) {
+      // Restart Arabic recognizer if needed
+      if ((currentMode === "both" || currentMode === "ar") && arRecog) {
+        try {
+          arRecog.stop();
+          setTimeout(() => {
+            if (isRunning && arRecog) arRecog.start();
+          }, 100);
+        } catch(e) {}
+      }
+      
+      // Restart Turkish recognizer if needed
+      if ((currentMode === "both" || currentMode === "tr") && trRecog) {
+        try {
+          trRecog.stop();
+          setTimeout(() => {
+            if (isRunning && trRecog) trRecog.start();
+          }, 150);
+        } catch(e) {}
+      }
+      
+      statusMsg.innerHTML = '🔄 Microphone restarted - continue speaking!';
+      setTimeout(() => {
+        if (isRunning) statusMsg.innerHTML = '🎙️ LISTENING: Speak Arabic or Turkish';
+      }, 2000);
+    }
+  }, 500);
+}
+
+// Create Arabic recognizer (mobile optimized)
 function createArabic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
@@ -195,6 +283,14 @@ function createArabic() {
   rec.continuous = true;
   rec.interimResults = false;
   rec.lang = 'ar-EG';
+  rec.maxAlternatives = 1;
+  
+  rec.onstart = () => {
+    if (currentMode === "both" || currentMode === "ar") {
+      statusMsg.innerHTML = '🎙️ Listening for ARABIC...';
+    }
+  };
+  
   rec.onresult = (e) => {
     if (!isRunning) return;
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -208,14 +304,34 @@ function createArabic() {
       }
     }
   };
-  rec.onend = () => {
-    if (isRunning) {
-      setTimeout(() => { if (isRunning && arRecog) try { arRecog.start(); } catch(e) {} }, 300);
+  
+  rec.onerror = (err) => {
+    console.log("AR Error:", err.error);
+    if (err.error === 'not-allowed') {
+      statusMsg.innerHTML = '❌ Microphone denied. Check permissions.';
+      stopAll();
+    } else if (err.error === 'no-speech') {
+      // Silent - just continue
+    } else if (err.error === 'audio-capture') {
+      statusMsg.innerHTML = '❌ No microphone found. Check your headset.';
     }
   };
+  
+  rec.onend = () => {
+    // Auto-restart for continuous listening on mobile
+    if (isRunning && (currentMode === "both" || currentMode === "ar")) {
+      setTimeout(() => {
+        if (isRunning && arRecog) {
+          try { arRecog.start(); } catch(e) { console.log("AR restart failed"); }
+        }
+      }, 200);
+    }
+  };
+  
   return rec;
 }
 
+// Create Turkish recognizer (mobile optimized)
 function createTurkish() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
@@ -223,6 +339,14 @@ function createTurkish() {
   rec.continuous = true;
   rec.interimResults = false;
   rec.lang = 'tr-TR';
+  rec.maxAlternatives = 1;
+  
+  rec.onstart = () => {
+    if (currentMode === "both" || currentMode === "tr") {
+      statusMsg.innerHTML = '🎙️ Listening for TURKISH...';
+    }
+  };
+  
   rec.onresult = (e) => {
     if (!isRunning) return;
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -236,30 +360,87 @@ function createTurkish() {
       }
     }
   };
-  rec.onend = () => {
-    if (isRunning) {
-      setTimeout(() => { if (isRunning && trRecog) try { trRecog.start(); } catch(e) {} }, 300);
+  
+  rec.onerror = (err) => {
+    console.log("TR Error:", err.error);
+    if (err.error === 'not-allowed') {
+      statusMsg.innerHTML = '❌ Microphone denied. Check permissions.';
+      stopAll();
     }
   };
+  
+  rec.onend = () => {
+    // Auto-restart for continuous listening on mobile
+    if (isRunning && (currentMode === "both" || currentMode === "tr")) {
+      setTimeout(() => {
+        if (isRunning && trRecog) {
+          try { trRecog.start(); } catch(e) { console.log("TR restart failed"); }
+        }
+      }, 250);
+    }
+  };
+  
   return rec;
 }
 
+// Request wake lock to prevent screen sleep (mobile)
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      statusMsg.innerHTML = '✅ Screen will stay ON - Keep speaking!';
+      setTimeout(() => {
+        if (isRunning) statusMsg.innerHTML = '🎙️ LISTENING: Speak Arabic or Turkish';
+      }, 2000);
+    } catch(e) { console.log("Wake lock error:", e); }
+  }
+}
+
+// Release wake lock
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release();
+    wakeLock = null;
+  }
+}
+
+// Request microphone permission
+async function requestMic() {
+  try {
+    statusMsg.innerHTML = '🎤 Requesting microphone...';
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    micDot.classList.add('active');
+    statusMsg.innerHTML = '✅ Microphone ready! Click START';
+    return true;
+  } catch(err) {
+    micDot.classList.remove('active');
+    statusMsg.innerHTML = '❌ Microphone denied. Check browser settings.';
+    return false;
+  }
+}
+
+// Start the app
 async function startApp() {
   if (isRunning) return;
   
   if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
-    statusMsg.innerHTML = '❌ Speech recognition not supported.';
+    statusMsg.innerHTML = '❌ Speech recognition not supported on this browser.';
     return;
   }
   
-  if (!arRecog) arRecog = createArabic();
-  if (!trRecog) trRecog = createTurkish();
+  const hasPerm = await requestMic();
+  if (!hasPerm) return;
   
-  if (!arRecog || !trRecog) {
-    statusMsg.innerHTML = '❌ Could not create speech recognizers';
-    return;
+  // Create recognizers based on mode
+  if (currentMode === "both" || currentMode === "ar") {
+    if (!arRecog) arRecog = createArabic();
+  }
+  if (currentMode === "both" || currentMode === "tr") {
+    if (!trRecog) trRecog = createTurkish();
   }
   
+  // Reset text
   arText = "";
   trText = "";
   arSpoken.innerHTML = "—";
@@ -270,27 +451,45 @@ async function startApp() {
   isRunning = true;
   micDot.classList.add('active');
   
-  try { arRecog.start(); } catch(e) {}
-  setTimeout(() => { try { trRecog.start(); } catch(e) {} }, 200);
+  // Start recognizers based on mode
+  if (currentMode === "both" || currentMode === "ar") {
+    try { arRecog.start(); } catch(e) { console.log(e); }
+  }
+  if (currentMode === "both" || currentMode === "tr") {
+    setTimeout(() => { 
+      try { if (trRecog) trRecog.start(); } catch(e) {} 
+    }, 200);
+  }
   
   startBtn.disabled = true;
   stopBtn.style.display = 'inline-flex';
-  statusMsg.innerHTML = '🎙️ LISTENING: Speak Arabic or Turkish';
+  statusMsg.innerHTML = '🎙️ LISTENING: Speak ' + 
+    (currentMode === "both" ? "Arabic or Turkish" : (currentMode === "ar" ? "Arabic" : "Turkish"));
+  
+  // Request wake lock on mobile
+  requestWakeLock();
 }
 
+// Stop everything
 function stopAll() {
   isRunning = false;
   micDot.classList.remove('active');
+  
   if (arRecog) try { arRecog.stop(); } catch(e) {}
   if (trRecog) try { trRecog.stop(); } catch(e) {}
   if (arTimer) clearTimeout(arTimer);
   if (trTimer) clearTimeout(trTimer);
+  if (restartTimeout) clearTimeout(restartTimeout);
   if (window.speechSynthesis) window.speechSynthesis.cancel();
+  
+  releaseWakeLock();
+  
   startBtn.disabled = false;
   stopBtn.style.display = 'none';
   statusMsg.innerHTML = '⏹️ Stopped. Click START to resume.';
 }
 
+// Clear all text
 function clearAll() {
   arText = "";
   trText = "";
@@ -299,21 +498,68 @@ function clearAll() {
   arTrans.innerHTML = "—";
   trTrans.innerHTML = "—";
   statusMsg.innerHTML = '🗑️ Cleared';
+  setTimeout(() => {
+    if (isRunning) statusMsg.innerHTML = '🎙️ LISTENING: Continue speaking';
+  }, 1500);
 }
 
+// Reset mic (fix for mobile when listening stops)
+function resetMic() {
+  if (isRunning) {
+    statusMsg.innerHTML = '🔄 Resetting microphone...';
+    forceRestart();
+  } else {
+    startApp();
+  }
+}
+
+// Change mode
+function setMode(mode) {
+  currentMode = mode;
+  modeBtns.forEach(btn => {
+    if (btn.dataset.mode === mode) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  // If running, restart with new mode
+  if (isRunning) {
+    stopAll();
+    setTimeout(() => startApp(), 500);
+  }
+}
+
+// Event listeners
 startBtn.onclick = startApp;
 stopBtn.onclick = stopAll;
 clearBtn.onclick = clearAll;
+reloadBtn.onclick = resetMic;
 
-// For NW.js/Electron - request microphone permission automatically
-if (typeof require !== 'undefined') {
-  try {
-    const { systemPreferences } = require('electron');
-    if (systemPreferences && systemPreferences.askForMediaAccess) {
-      systemPreferences.askForMediaAccess('microphone');
+modeBtns.forEach(btn => {
+  btn.onclick = () => setMode(btn.dataset.mode);
+});
+
+// Handle page visibility (important for mobile)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    // Page hidden - don't restart
+    console.log("Page hidden");
+  } else {
+    // Page visible again - if should be running, restart
+    if (isRunning) {
+      setTimeout(() => resetMic(), 500);
     }
-  } catch(e) {}
-}
+  }
+});
+
+// Prevent screen sleep when app is active
+setInterval(() => {
+  if (isRunning && 'wakeLock' in navigator && !wakeLock) {
+    requestWakeLock();
+  }
+}, 30000);
 </script>
 </body>
 </html>
